@@ -886,3 +886,475 @@ Returns the estimated total number of unique visitors across both months.
 - **Sets** store unique values and support set operations like union and intersection.
 - **HyperLogLog** provides memory-efficient approximate counting of unique elements.
 - Redis operations are **atomic**, ensuring consistency even with concurrent clients.
+
+# Redis Transactions
+
+Redis Transactions allow you to execute multiple commands as a single unit of work. Transactions ensure that all queued commands are executed sequentially without interruption from other clients.
+
+## Key Features
+
+- Executes multiple commands in a single transaction.
+- Provides **atomic execution**, meaning queued commands are executed together.
+- Commands are queued until `EXEC` is called.
+- Supports conditional execution using `WATCH`.
+- Transactions can be cancelled using `DISCARD`.
+
+---
+
+## Transaction Commands
+
+### MULTI
+
+Starts a transaction. All subsequent commands are queued instead of being executed immediately.
+
+```redis
+MULTI
+```
+
+Output
+
+```text
+OK
+```
+
+---
+
+### Queue Commands
+
+Once inside transaction mode, commands are queued.
+
+```redis
+SET name Shabir
+SET A 1
+SET B 2
+```
+
+Output
+
+```text
+QUEUED
+QUEUED
+QUEUED
+```
+
+---
+
+### EXEC
+
+Executes all queued commands.
+
+```redis
+EXEC
+```
+
+Output
+
+```text
+1) OK
+2) OK
+3) OK
+```
+
+---
+
+### DISCARD
+
+Cancels the transaction and removes all queued commands.
+
+```redis
+MULTI
+
+SET name Redis
+
+DISCARD
+```
+
+Output
+
+```text
+OK
+```
+
+No commands are executed.
+
+---
+
+### WATCH
+
+Monitors one or more keys before executing a transaction.
+
+If another client modifies any watched key before `EXEC` is called, the transaction is aborted.
+
+```redis
+WATCH balance
+
+MULTI
+
+DECRBY balance 100
+
+EXEC
+```
+
+If another client changes `balance` before `EXEC`, Redis returns:
+
+```text
+(nil)
+```
+
+The transaction is cancelled.
+
+---
+
+## Complete Transaction Example
+
+```redis
+MULTI
+
+SET name Shabir
+SET A 1
+SET B 2
+
+EXEC
+```
+
+Output
+
+```text
+1) OK
+2) OK
+3) OK
+```
+
+---
+
+## Transaction Workflow
+
+```text
+MULTI
+   │
+   ▼
+Queue Commands
+   │
+   ▼
+EXEC
+   │
+   ▼
+All Commands Executed
+```
+
+Or
+
+```text
+MULTI
+   │
+   ▼
+Queue Commands
+   │
+   ▼
+DISCARD
+   │
+   ▼
+Transaction Cancelled
+```
+
+---
+
+## Summary
+
+| Command | Description |
+|----------|-------------|
+| MULTI | Starts a transaction |
+| EXEC | Executes queued commands |
+| DISCARD | Cancels the transaction |
+| WATCH | Watches keys for modifications |
+
+---
+
+# Redis Pub/Sub (Publisher-Subscriber)
+
+Redis Pub/Sub is a real-time messaging system where clients communicate through **channels**.
+
+- **Publishers** send messages to channels.
+- **Subscribers** listen to channels.
+- Messages are delivered instantly to all subscribed clients.
+
+---
+
+## Pub/Sub Architecture
+
+```text
+           Publisher
+                │
+         PUBLISH news
+                │
+        ----------------
+        |              |
+ Subscriber 1    Subscriber 2
+  SUBSCRIBE       PSUBSCRIBE
+     news            news*
+```
+
+---
+
+## Pub/Sub Commands
+
+### SUBSCRIBE
+
+Subscribe to a specific channel.
+
+```redis
+SUBSCRIBE news
+```
+
+Output
+
+```text
+Subscribed to channel "news"
+```
+
+The client remains listening until the connection is closed.
+
+---
+
+### PUBLISH
+
+Sends a message to a channel.
+
+```redis
+PUBLISH news "Breaking News!"
+```
+
+Output
+
+```text
+2
+```
+
+The returned number indicates how many subscribers received the message.
+
+---
+
+### PSUBSCRIBE
+
+Subscribe using a pattern.
+
+```redis
+PSUBSCRIBE news*
+```
+
+This subscriber receives messages from channels such as:
+
+- news
+- news_today
+- news_update
+- news_world
+
+---
+
+## Wildcards
+
+### *
+
+Matches zero or more characters.
+
+Example
+
+```text
+news*
+```
+
+Matches:
+
+```text
+news
+news1
+news_today
+news_update
+```
+
+---
+
+### ?
+
+Matches exactly one character.
+
+Pattern
+
+```text
+h?llo
+```
+
+Matches
+
+```text
+hello
+hallo
+```
+
+Does **not** match
+
+```text
+heello
+```
+
+---
+
+### [ ]
+
+Matches one character from the specified set.
+
+Pattern
+
+```text
+b[ai]ll
+```
+
+Matches
+
+```text
+ball
+bill
+```
+
+Does **not** match
+
+```text
+bell
+```
+
+---
+
+# Pub/Sub Management Commands
+
+## PUBSUB CHANNELS
+
+Lists all active channels that currently have subscribers.
+
+```redis
+PUBSUB CHANNELS
+```
+
+Example Output
+
+```text
+news
+sports
+chat
+```
+
+---
+
+## PUBSUB NUMSUB
+
+Shows the number of subscribers for a channel.
+
+```redis
+PUBSUB NUMSUB news
+```
+
+Example Output
+
+```text
+news
+2
+```
+
+---
+
+## PUBSUB NUMPAT
+
+Returns the total number of pattern-based subscriptions.
+
+```redis
+PUBSUB NUMPAT
+```
+
+Example Output
+
+```text
+3
+```
+
+---
+
+# Complete Pub/Sub Example
+
+### Client 1 (Subscriber)
+
+```redis
+SUBSCRIBE news
+```
+
+---
+
+### Client 2 (Pattern Subscriber)
+
+```redis
+PSUBSCRIBE news*
+```
+
+---
+
+### Client 3 (Publisher)
+
+```redis
+PUBLISH news "Breaking News!"
+```
+
+---
+
+### Result
+
+Both subscribers receive:
+
+```text
+Breaking News!
+```
+
+---
+
+# Pub/Sub Workflow
+
+```text
+Client 1
+SUBSCRIBE news
+        │
+        ▼
+
+      Channel (news)
+
+        ▲
+        │
+
+PUBLISH "Breaking News!"
+
+        │
+        ▼
+
+Client 2
+PSUBSCRIBE news*
+```
+
+---
+
+## Summary
+
+| Command | Description |
+|----------|-------------|
+| SUBSCRIBE | Subscribe to a channel |
+| PUBLISH | Publish a message |
+| PSUBSCRIBE | Subscribe using patterns |
+| PUBSUB CHANNELS | List active channels |
+| PUBSUB NUMSUB | Number of subscribers |
+| PUBSUB NUMPAT | Number of pattern subscriptions |
+
+---
+
+# Key Takeaways
+
+- **Transactions** execute multiple commands together using `MULTI` and `EXEC`.
+- **WATCH** enables optimistic locking by monitoring keys for changes.
+- **DISCARD** cancels queued commands before execution.
+- **Pub/Sub** enables real-time communication between publishers and subscribers.
+- **PSUBSCRIBE** allows wildcard subscriptions to multiple channels.
+- **PUBSUB** commands help monitor active channels and subscribers.
